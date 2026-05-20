@@ -7,10 +7,10 @@ forcing forward agents to confront worst-case scenarios.
 
 This prevents the "consensus drift" where multiple reflection rounds
 cause agents to converge on compromise valuations.
+
+v3.3: JSON 解析已升级为通用 XML 提取器 + 5 级修复管线。
 """
 
-import re
-import json
 import litellm
 from state import PipelineState
 from prompts.red_team import (
@@ -21,146 +21,21 @@ from prompts.red_team import (
     RED_TEAM_PHARMA_PROMPT,
 )
 from utils.config import get_model
+from utils.xml_extractor import extract_json, _fallback as _xml_fallback
 
 
 # ═══════════════════════════════════════════════════════════
-#  Robust JSON cleaning (handles LLM malformed output)
+#  Legacy alias — backwards compatibility
 # ═══════════════════════════════════════════════════════════
 
 def clean_and_parse_json(raw_text: str) -> dict:
-    """Extract and parse JSON from LLM output with aggressive repair."""
-    if not raw_text or not raw_text.strip():
-        return _red_team_fallback("空响应")
-
-    # Strip markdown code fences
-    text = raw_text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-    if text.endswith("```"):
-        text = text[:-3].strip()
-
-    # Extract JSON block — find the outermost { ... }
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    json_str = match.group(0) if match else text
-
-    # Fix unescaped newlines inside string values
-    json_str = json_str.replace('\r', '')
-
-    # Try raw parse first
-    try:
-        return json.loads(json_str)
-    except json.JSONDecodeError:
-        pass
-
-    # Repair 1: collapse multi-line string values (common LLM failure)
-    repaired = _repair_multiline_strings(json_str)
-    try:
-        return json.loads(repaired)
-    except json.JSONDecodeError:
-        pass
-
-    # Repair 2: truncate trailing garbage
-    repaired = _repair_trailing_garbage(json_str)
-    try:
-        return json.loads(repaired)
-    except json.JSONDecodeError:
-        pass
-
-    # Repair 3: brute-force brace/suffix completion
-    repaired = _repair_brace_completion(json_str)
-    try:
-        return json.loads(repaired)
-    except json.JSONDecodeError:
-        pass
-
-    # Ultimate fallback
-    print(f"  ⚠ [Red Team] JSON 全部修复策略失败，使用兜底")
-    return _red_team_fallback(f"JSON解析失败，原始片段: {json_str[:200]}")
-
-
-def _repair_multiline_strings(json_str: str) -> str:
-    """Collapse literal newlines inside JSON string values (not structural)."""
-    # Replace newlines within quoted strings — naive but effective for LLM output
-    result = []
-    in_string = False
-    escape_next = False
-    for ch in json_str:
-        if escape_next:
-            result.append(ch)
-            escape_next = False
-            continue
-        if ch == '\\':
-            result.append(ch)
-            escape_next = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            result.append(ch)
-            continue
-        if in_string and ch == '\n':
-            result.append('\\n')
-            continue
-        result.append(ch)
-    return ''.join(result)
-
-
-def _repair_trailing_garbage(json_str: str) -> str:
-    """Find the last valid closing brace/bracket and truncate."""
-    # Walk backwards to find balanced closing
-    depth = 0
-    last_valid = len(json_str)
-    for i in range(len(json_str) - 1, -1, -1):
-        ch = json_str[i]
-        if ch == '}':
-            depth += 1
-        elif ch == '{':
-            depth -= 1
-            if depth == 0:
-                last_valid = i
-    # Try truncating at last_valid
-    candidate = json_str[:last_valid] + '}'
-    return candidate
-
-
-def _repair_brace_completion(json_str: str) -> str:
-    """Brute-force: pad missing closing braces/ brackets/ quotes."""
-    s = json_str.strip()
-    # Count unclosed braces/brackets
-    open_braces = s.count('{') - s.count('}')
-    open_brackets = s.count('[') - s.count(']')
-
-    # Remove trailing comma before closing (common LLM artifact)
-    s = re.sub(r',\s*$', '', s)
-
-    # Close open structures
-    if open_brackets > 0:
-        s += ']' * open_brackets
-    if open_braces > 0:
-        s += '}' * open_braces
-
-    # Fix unclosed string values (odd number of quotes)
-    if s.count('"') % 2 != 0:
-        # Check if last value is truncated — add closing quote
-        last_quote = s.rfind('"')
-        last_colon = s.rfind(':')
-        if last_colon > last_quote:
-            s += '"'
-
-    return s
+    """v3.3: 委托至通用 XML 提取器。保留旧函数名以确保向后兼容。"""
+    return extract_json(raw_text)
 
 
 def _red_team_fallback(reason: str) -> dict:
-    """Deterministic fallback when all JSON repair strategies fail."""
-    return {
-        "bearish_signals": [f"红队JSON解析失败: {reason}"],
-        "severity": "high",
-        "reasoning": "红队文本解析全面崩溃，强制转入人工审计",
-        "most_dangerous_signal": "无法自动分析——模型输出不可解析",
-        "suggested_adjustments": {
-            "peg_haircut_recommendation": "PEG建议强制打7折以计入不确定性",
-            "valuation_floor_risk": "极端悲观估值下限: 净资产打8折",
-        },
-    }
+    """v3.3: 委托至通用 XML 提取器的兜底函数。"""
+    return _xml_fallback(reason)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -248,6 +123,11 @@ def node_red_team(state: PipelineState) -> PipelineState:
 
     snapshot = _build_red_team_snapshot(state)
     prompt = RED_TEAM_PROMPT.format(company_data=snapshot)
+    # v3.3: 动态注入战略豁免上下文
+    from utils.strategic_context import get_strategic_context
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     print(f"  🩸 [Red Team] 启动空头杠精对抗性分析 (反思轮次 {round_num})...")
 
@@ -294,6 +174,10 @@ def node_red_team_capex(state: PipelineState) -> PipelineState:
         red_team_focus=focus,
         company_data=snapshot,
     )
+    from utils.strategic_context import get_strategic_context
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     print(f"  🏭 [Red Team CAPEX] 供给侧定向审查 (轮次 {round_num})")
     print(f"    焦点: {focus[:120]}")
@@ -344,6 +228,10 @@ def node_red_team_competition(state: PipelineState) -> PipelineState:
         red_team_focus=focus,
         company_data=snapshot,
     )
+    from utils.strategic_context import get_strategic_context
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     print(f"  ⚔  [Red Team COMP] 竞争格局定向审查 (轮次 {round_num})")
     print(f"    焦点: {focus[:120]}")
@@ -402,6 +290,10 @@ def node_red_team_strategic_growth(state: PipelineState) -> PipelineState:
         red_team_focus=focus,
         company_data=snapshot,
     )
+    from utils.strategic_context import get_strategic_context
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     print(f"  🚀 [Red Team STRATEGIC] 战略成长股深水区审查 (轮次 {round_num})")
     print(f"    焦点: {focus[:120]}")
@@ -463,6 +355,10 @@ def node_red_team_pharma(state: PipelineState) -> PipelineState:
         red_team_focus=focus,
         company_data=snapshot,
     )
+    from utils.strategic_context import get_strategic_context
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     print(f"  💊 [Red Team PHARMA] 创新药/Biotech 深水区审查 (轮次 {round_num})")
     print(f"    焦点: {focus[:120]}")

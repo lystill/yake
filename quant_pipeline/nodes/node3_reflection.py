@@ -324,6 +324,13 @@ def _run_cio_reconciliation(state: PipelineState, classical_price: float) -> dic
         current_price=current_price,
     )
 
+    # v3.3: 动态注入战略豁免上下文至CIO
+    from utils.strategic_context import get_strategic_context
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
+        print(f"  🔥 [战略上下文] 已向CIO注入战略豁免通知（{state['stock_code']}）")
+
     print(f"  🏛  [CIO] 启动投资总监冲突调和... (古典价={classical_price:.2f}, 偏离={deviation:.1%})")
 
     try:

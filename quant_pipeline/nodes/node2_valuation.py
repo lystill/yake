@@ -7,6 +7,8 @@ Step B: Route to branch-specific LLM valuation prompt.
 
 import json
 import litellm
+from utils.xml_extractor import extract_json
+from utils.strategic_context import get_strategic_context
 from state import (
     PipelineState,
     BusinessSegment,
@@ -375,6 +377,14 @@ def node2_valuation(state: PipelineState) -> PipelineState:
             sotp_reasons="\n".join(reasons) if triggered else "SOTP未触发",
         )
 
+    # ═══════════════════════════════════════════════════════════
+    #  v3.3: 动态注入战略资产豁免上下文
+    # ═══════════════════════════════════════════════════════════
+    strategic_ctx = get_strategic_context(state.get("stock_code", ""))
+    if strategic_ctx:
+        prompt = strategic_ctx + "\n\n" + prompt
+        print(f"  🔥 [战略上下文] 已向估值Agent注入战略豁免通知（{state['stock_code']}）")
+
     if is_pharma:
         print(f"  💊 [v3.3] 医药/Biotech PS估值Fallback已激活 — 禁止PE/PEG，强制动态PS+管线溢价")
 
@@ -386,11 +396,7 @@ def node2_valuation(state: PipelineState) -> PipelineState:
             max_tokens=1200,
         )
         content = response.choices[0].message.content.strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1]
-            if content.endswith("```"):
-                content = content[:-3]
-        result = json.loads(content)
+        result = extract_json(content)
     except Exception as e:
         state["error"] = f"Node 2 LLM call failed: {e}"
         return state

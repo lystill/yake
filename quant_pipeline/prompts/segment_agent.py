@@ -59,7 +59,9 @@ SEGMENT_AGENT_PROMPT = """你是一名细分行业估值专家。你只需要对
 
 ## 输出格式
 
-严格 JSON（不要任何额外文字）:
+你必须将最终的分析结果整理为严格的 JSON 字典，并将其包裹在 <json_response> 和 </json_response> 标签内部。严禁在标签外输出 Markdown 标记或任何解释性废话。
+
+<json_response>
 {{
   "comparable_pe": 浮点数,
   "valuation": 浮点数（板块估值，亿元 = 净利润 × PE）,
@@ -68,4 +70,5 @@ SEGMENT_AGENT_PROMPT = """你是一名细分行业估值专家。你只需要对
   "comparable_companies": ["可比公司A: PE约Xx", "可比公司B: PE约Yx"],
   "reasoning": "不超过100字的估值依据，引用可比公司或行业规律"
 }}
+</json_response>
 """

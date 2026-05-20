@@ -152,8 +152,9 @@ L1 判断依据：{l1_reasoning}
 
 ## 三、输出格式
 
-严格 JSON（不要任何额外文字）:
+你必须将最终的分析结果整理为严格的 JSON 字典，并将其包裹在 <json_response> 和 </json_response> 标签内部。严禁在标签外输出 Markdown 标记或任何解释性废话。
 
+<json_response>
 {{
   "penetration_stage": "<5%导入期" | "5-30%爆发期" | ">30%成熟期" | "",
   "current_rate_estimate": "渗透率估计值（如：'国产化率约18%，年化+5个百分点'），非放量驱动填''",
@@ -164,4 +165,5 @@ L1 判断依据：{l1_reasoning}
   "suggested_framework": "从以下 7 个框架中选择唯一解 — PB-ROE底部锚 | PE/PEG弹性锚 | PS+管线估值 | PEG+S曲线+SOTP | 成熟PE+股息率 | DCF/DDM类债券 | 概率加权/rNPV",
   "reasoning": "不超过150字的判定依据，必须引用L1结论和具体数据（如固产比、渗透率证据、CAPEX信号）"
 }}
+</json_response>
 """

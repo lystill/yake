@@ -37,6 +37,8 @@ from prompts.l2_agent import L2_AGENT_PROMPT
 from prompts.l3_agent import L3_AGENT_PROMPT
 from nodes.node3_reflection import build_red_team_injection
 from utils.config import get_model
+from utils.xml_extractor import extract_json
+from utils.strategic_context import get_strategic_context, is_strategic_asset
 
 # ═══════════════════════════════════════════════════════════════
 #  Reflection injection template
@@ -235,15 +237,22 @@ def _build_l3_snapshot(state: PipelineState) -> str:
 # ═══════════════════════════════════════════════════════════════
 
 def _clean_llm_json(content: str) -> str:
-    """Strip markdown fences from LLM output."""
+    """v3.3: Legacy alias — delegates to XML extractor. Strip markdown fences from LLM output."""
     content = content.strip()
     if content.startswith("```"):
         lines = content.split("\n")
-        # Drop opening fence (may have language tag)
         content = "\n".join(lines[1:])
         if content.endswith("```"):
             content = content[:-3]
     return content.strip()
+
+
+def _parse_llm_response(content: str, fallback: dict) -> dict:
+    """v3.3: Use universal XML extractor + repair pipeline."""
+    try:
+        return extract_json(content)
+    except Exception:
+        return fallback
 
 
 def _inject_reflection(state: PipelineState, agent: str, prompt: str) -> str:
@@ -320,6 +329,10 @@ def _run_l1(state: PipelineState, model: str) -> dict:
     snapshot = _build_l1_snapshot(state)
     prompt = L1_AGENT_PROMPT.format(company_data=snapshot)
     prompt = _inject_reflection(state, "L1", prompt)
+    # v3.3: 动态注入战略豁免上下文
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     t_start = time.perf_counter()
     fallback = False
@@ -333,7 +346,13 @@ def _run_l1(state: PipelineState, model: str) -> dict:
             max_tokens=500,
         )
         content = _clean_llm_json(response.choices[0].message.content)
-        result = json.loads(content)
+        result = _parse_llm_response(content, {
+            "profit_driver": "涨价驱动",
+            "confidence": 0.0,
+            "reasoning": f"LLM调用失败: JSON解析崩溃",
+            "primary_segment": "",
+            "price_vs_volume_clue": "",
+        })
     except Exception as e:
         fallback = True
         error_msg = str(e)[:200]
@@ -402,6 +421,9 @@ def _run_l2(state: PipelineState, model: str) -> dict:
         l1_reasoning=l1_reasoning,
     )
     prompt = _inject_reflection(state, "L2", prompt)
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     t_start = time.perf_counter()
     fallback = False
@@ -415,7 +437,7 @@ def _run_l2(state: PipelineState, model: str) -> dict:
             max_tokens=500,
         )
         content = _clean_llm_json(response.choices[0].message.content)
-        result = json.loads(content)
+        result = _parse_llm_response(content, _l2_fallback(state, pd, "JSON解析崩溃"))
     except Exception as e:
         fallback = True
         error_msg = str(e)[:200]
@@ -557,6 +579,9 @@ def _run_l3(state: PipelineState, model: str) -> dict:
         capex_note=capex_note or "未获取",
     )
     prompt = _inject_reflection(state, "L3", prompt)
+    sctx = get_strategic_context(state.get("stock_code", ""))
+    if sctx:
+        prompt = sctx + "\n\n" + prompt
 
     t_start = time.perf_counter()
     fallback = False
@@ -570,7 +595,7 @@ def _run_l3(state: PipelineState, model: str) -> dict:
             max_tokens=600,
         )
         content = _clean_llm_json(response.choices[0].message.content)
-        result = json.loads(content)
+        result = _parse_llm_response(content, _l3_fallback(state, pd, "JSON解析崩溃"))
     except Exception as e:
         fallback = True
         error_msg = str(e)[:200]
