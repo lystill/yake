@@ -254,9 +254,11 @@ def _is_pharma_biotech(state: PipelineState) -> bool:
     research_ctx = state.get("research_context", "")
     exemption_reasons = state.get("exemption_reasons", [])
 
-    # Check exemption reasons for v3.3 tag (strongest signal, from node0_quick_screen)
+    # Check exemption reasons for pharma-specific indicators (from node0_quick_screen)
+    # "v3.3豁免" is intentionally excluded — the YAML Tier 0 registry applies it to
+    # ALL strategic assets (semiconductor + pharma), so it cannot discriminate.
     for reason in exemption_reasons:
-        if "v3.3豁免" in reason or "创新药" in reason or "管线驱动" in reason:
+        if "创新药" in reason or "管线驱动" in reason or "Biotech" in reason:
             return True
 
     # Check known pharma companies
