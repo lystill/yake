@@ -91,7 +91,7 @@ def _build_agent_snapshot(state: PipelineState, agent: str) -> str:
             rev_cagr = (fin.revenue[2] / fin.revenue[0]) ** (1/2) - 1 if fin.revenue[0] > 0 else 0
             lines.append(f"3年收入 CAGR: {rev_cagr:+.1%}")
         if len(fin.net_profit_parent) >= 3:
-            profit_cagr = (fin.net_profit_parent[2] / fin.net_profit_parent[0]) ** (1/2) - 1 if fin.net_profit_parent[0] > 0 else 0
+            profit_cagr = (fin.net_profit_parent[2] / fin.net_profit_parent[0]) ** (1/2) - 1 if (fin.net_profit_parent[0] > 0 and fin.net_profit_parent[2] > 0) else 0
             lines.append(f"3年利润 CAGR: {profit_cagr:+.1%}")
         lines.extend([
             f"营业收入 (近3年): {fin.revenue}",
