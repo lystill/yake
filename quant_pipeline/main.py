@@ -236,7 +236,8 @@ if __name__ == "__main__":
         print(f"  标的: {state['stock_name']} ({state['stock_code']})")
         print(f"  数据源: akshare 同花顺实时抓取")
 
-        result = run_pipeline(state)
+        generate_pdf = "--pdf" in args
+        result = run_pipeline(state, generate_pdf=generate_pdf)
         sys.exit(0)
 
     # ——— No args ———
