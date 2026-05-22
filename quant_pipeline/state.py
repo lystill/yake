@@ -256,5 +256,8 @@ class PipelineState(TypedDict, total=False):
     pipeline_start_ts: str              # ISO timestamp when pipeline started
     graph_topology: str                 # topology identifier for report footer
 
+    # --- Output control ---
+    generate_pdf: bool                  # False by default — PDF is slow and large
+
     # --- Flow control ---
     error: str

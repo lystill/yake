@@ -688,10 +688,11 @@ def node_report(state: PipelineState) -> PipelineState:
 
     print(f"  📄 Markdown: {md_path}")
 
-    # Generate PDF
-    pdf_path = _write_pdf(stock_code, markdown)
-    if pdf_path:
-        print(f"  📕 PDF:      {pdf_path}")
+    # Generate PDF (only when explicitly requested)
+    if state.get("generate_pdf"):
+        pdf_path = _write_pdf(stock_code, markdown)
+        if pdf_path:
+            print(f"  📕 PDF:      {pdf_path}")
 
     print()
 
@@ -830,9 +831,10 @@ def build_graph() -> StateGraph:
 #  Convenience runner
 # ============================================================
 
-def run_pipeline(state: PipelineState) -> PipelineState:
+def run_pipeline(state: PipelineState, generate_pdf: bool = False) -> PipelineState:
     """Build the graph and invoke it once. Minimal input: stock_code only."""
     state.setdefault("reflection_round", 0)
+    state.setdefault("generate_pdf", generate_pdf)
     state.setdefault("valuation_deviation", 0.0)
     state.setdefault("reflection_triggered", False)
     state.setdefault("governance_flags", [])
